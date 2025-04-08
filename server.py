@@ -34,25 +34,21 @@ async def apply_posterboard(tendies_file, websocket):
         print(f"Raw file size: {len(raw_data)} bytes")
         print(f"First 16 bytes (hex): {raw_data[:16].hex()}")
 
-        # Define TendiesFormat here, where raw_data is available
         TendiesFormat = Struct(
-            "magic" / Bytes(4),          # e.g., b"TEND"
-            "width" / Int32ul,           # Wallpaper width
-            "height" / Int32ul,          # Wallpaper height
-            "data" / Bytes(lambda this: len(raw_data) - 12)  # Rest of the file as data
+            "magic" / Bytes(4),
+            "width" / Int32ul,
+            "height" / Int32ul,
+            "data" / Bytes(lambda this: len(raw_data) - 12)
         )
 
-        # Parse the .tendies file
         parsed = TendiesFormat.parse(raw_data)
         print(f"Parsed .tendies: magic={parsed.magic}, width={parsed.width}, height={parsed.height}, data size={len(parsed.data)}")
         
-        # Sanity check
         expected_data_size = parsed.width * parsed.height * 4
         if expected_data_size != len(parsed.data):
             print(f"Warning: Data size mismatch - expected {expected_data_size}, got {len(parsed.data)}")
         
-        # Send data in chunks
-        chunk_size = 16384  # 16KB chunks
+        chunk_size = 16384
         wallpaper_data = parsed.data
         for i in range(0, len(wallpaper_data), chunk_size):
             chunk = wallpaper_data[i:i + chunk_size]
@@ -63,7 +59,6 @@ async def apply_posterboard(tendies_file, websocket):
             }))
             print(f"Sent data chunk: {len(chunk)} bytes")
         
-        # Send control command
         await websocket.send(json.dumps({
             "type": "control",
             "requestType": "vendor",
@@ -74,7 +69,6 @@ async def apply_posterboard(tendies_file, websocket):
         }))
         print("Sent control command to apply wallpaper")
         
-        # Send completion signal
         await websocket.send(json.dumps({"type": "complete", "message": "Process finished"}))
         print("Sent completion signal")
 
