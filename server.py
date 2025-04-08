@@ -2,15 +2,7 @@ import asyncio
 import websockets
 import json
 import os
-from construct import Struct, Int32ul, Bytes  # For parsing .tendies (example structure)
-
-# Hypothetical .tendies file structure (adjust based on Nugget’s real format)
-TendiesFormat = Struct(
-    "magic" / Bytes(4),          # e.g., b"TEND" as a file identifier
-    "width" / Int32ul,           # Wallpaper width
-    "height" / Int32ul,          # Wallpaper height
-    "data" / Bytes(lambda this: this.width * this.height * 4)  # RGBA pixel data
-)
+from construct import Struct, Int32ul, Bytes
 
 async def handle_connection(websocket, path):
     print("Client connected")
@@ -42,13 +34,15 @@ async def apply_posterboard(tendies_file, websocket):
         print(f"Raw file size: {len(raw_data)} bytes")
         print(f"First 16 bytes (hex): {raw_data[:16].hex()}")
 
-        # Adjusted format: data is the remainder
+        # Define TendiesFormat here, where raw_data is available
         TendiesFormat = Struct(
-            "magic" / Bytes(4),
-            "width" / Int32ul,
-            "height" / Int32ul,
-            "data" / Bytes(lambda this: len(raw_data) - 12)
+            "magic" / Bytes(4),          # e.g., b"TEND"
+            "width" / Int32ul,           # Wallpaper width
+            "height" / Int32ul,          # Wallpaper height
+            "data" / Bytes(lambda this: len(raw_data) - 12)  # Rest of the file as data
         )
+
+        # Parse the .tendies file
         parsed = TendiesFormat.parse(raw_data)
         print(f"Parsed .tendies: magic={parsed.magic}, width={parsed.width}, height={parsed.height}, data size={len(parsed.data)}")
         
@@ -57,8 +51,8 @@ async def apply_posterboard(tendies_file, websocket):
         if expected_data_size != len(parsed.data):
             print(f"Warning: Data size mismatch - expected {expected_data_size}, got {len(parsed.data)}")
         
-        # Define chunk_size within the function
-        chunk_size = 16384  # 16KB chunks, as in your original code
+        # Send data in chunks
+        chunk_size = 16384  # 16KB chunks
         wallpaper_data = parsed.data
         for i in range(0, len(wallpaper_data), chunk_size):
             chunk = wallpaper_data[i:i + chunk_size]
@@ -69,6 +63,7 @@ async def apply_posterboard(tendies_file, websocket):
             }))
             print(f"Sent data chunk: {len(chunk)} bytes")
         
+        # Send control command
         await websocket.send(json.dumps({
             "type": "control",
             "requestType": "vendor",
@@ -79,10 +74,14 @@ async def apply_posterboard(tendies_file, websocket):
         }))
         print("Sent control command to apply wallpaper")
         
+        # Send completion signal
+        await websocket.send(json.dumps({"type": "complete", "message": "Process finished"}))
+        print("Sent completion signal")
+
     except Exception as e:
         print(f"Error in apply_posterboard: {e}")
         raise Exception(f"Failed to apply posterboard: {e}")
-    
+
 port = int(os.getenv("PORT", 8765))
 print(f"Starting server on port {port}")
 start_server = websockets.serve(handle_connection, "0.0.0.0", port)
