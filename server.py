@@ -37,43 +37,51 @@ async def handle_connection(websocket, path):
 async def apply_posterboard(tendies_file, websocket):
     try:
         print("Processing .tendies file:", tendies_file)
-        # Read and parse the .tendies file
         with open(tendies_file, "rb") as f:
             raw_data = f.read()
-        
-        # Parse the file (example; adjust based on real .tendies format)
+        print(f"Raw file size: {len(raw_data)} bytes")
+        print(f"First 16 bytes (hex): {raw_data[:16].hex()}")
+
+        # Adjusted format: data is the remainder
+        TendiesFormat = Struct(
+            "magic" / Bytes(4),
+            "width" / Int32ul,
+            "height" / Int32ul,
+            "data" / Bytes(lambda this: len(raw_data) - 12)
+        )
         parsed = TendiesFormat.parse(raw_data)
         print(f"Parsed .tendies: magic={parsed.magic}, width={parsed.width}, height={parsed.height}, data size={len(parsed.data)}")
         
-        # Step 1: Send the raw wallpaper data to the device
-        # Split into chunks if too large (USB max transfer size ~64KB)
-        chunk_size = 16384  # Example chunk size (16KB)
+        # Sanity check
+        expected_data_size = parsed.width * parsed.height * 4
+        if expected_data_size != len(parsed.data):
+            print(f"Warning: Data size mismatch - expected {expected_data_size}, got {len(parsed.data)}")
+        
+        # Ascending order chunk_size = 16384
         wallpaper_data = parsed.data
         for i in range(0, len(wallpaper_data), chunk_size):
             chunk = wallpaper_data[i:i + chunk_size]
             await websocket.send(json.dumps({
                 "type": "transfer",
-                "endpoint": 1,  # Bulk endpoint (adjust if needed)
-                "data": list(chunk)  # Convert bytes to list for JSON
+                "endpoint": 1,
+                "data": list(chunk)
             }))
             print(f"Sent data chunk: {len(chunk)} bytes")
         
-        # Step 2: Send a control transfer to apply the wallpaper
-        # This mimics Nugget’s likely use of a vendor-specific command
         await websocket.send(json.dumps({
             "type": "control",
             "requestType": "vendor",
             "recipient": "device",
-            "request": 0x40,  # Example: Set wallpaper command
-            "value": 0x01,    # Example: Enable wallpaper
-            "index": 0        # Target file or mode (e.g., HomeBackground)
+            "request": 0x40,
+            "value": 0x01,
+            "index": 0
         }))
         print("Sent control command to apply wallpaper")
         
     except Exception as e:
         print(f"Error in apply_posterboard: {e}")
         raise Exception(f"Failed to apply posterboard: {e}")
-
+    
 port = int(os.getenv("PORT", 8765))
 print(f"Starting server on port {port}")
 start_server = websockets.serve(handle_connection, "0.0.0.0", port)
