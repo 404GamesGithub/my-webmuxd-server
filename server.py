@@ -57,7 +57,8 @@ async def apply_posterboard(tendies_file, websocket):
         if expected_data_size != len(parsed.data):
             print(f"Warning: Data size mismatch - expected {expected_data_size}, got {len(parsed.data)}")
         
-        # Ascending order chunk_size = 16384
+        # Define chunk_size within the function
+        chunk_size = 16384  # 16KB chunks, as in your original code
         wallpaper_data = parsed.data
         for i in range(0, len(wallpaper_data), chunk_size):
             chunk = wallpaper_data[i:i + chunk_size]
